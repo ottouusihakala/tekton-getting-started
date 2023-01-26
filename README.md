@@ -506,3 +506,136 @@ Delete the cluster
 ```
 minikube delete
 ```
+
+### PipelineResource
+
+Deprecated, you should use Tasks instead.
+
+https://tekton.dev/docs/pipelines/resources/
+
+`git` resource => `git-clone` Catalog task (https://github.com/tektoncd/catalog/tree/main/task/git-clone)
+
+`pullrequest` resource => `pullrequest` Catalog task (https://github.com/tektoncd/catalog/tree/main/task/pull-request)
+
+`gcs` => `gcs` Catalog task (https://github.com/tektoncd/catalog/tree/main/task/gcs-generic)
+
+`image` => Either a Kaniko or a Buildah Catalog Task
+* Kaniko (https://github.com/tektoncd/catalog/tree/v1beta1/kaniko)
+* Buildah (https://github.com/tektoncd/catalog/tree/v1beta1/buildah)
+
+`cluster` => `kubeconfig-creator` Catalog task (https://github.com/tektoncd/catalog/tree/main/task/kubeconfig-creator)
+
+`cloudEvent` => `CloudEvent` Catalog task (https://github.com/tektoncd/catalog/tree/main/task/cloudevent)
+
+What is Catalog?
+
+> is a repository of high-quality, community-contributed Tekton building blocks - Tasks, Pipelines, and so on - that are ready for use in your own pipelines.
+– https://tekton.dev/docs/concepts/overview/
+
+Link to Tekton Catalog: https://github.com/tektoncd/catalog/blob/v1beta1/README.md
+
+PipelineResources in a pipeline are the set of objects that are going to be used as inputs to a Task and can be output by a Task.
+
+Example task:
+```
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-with-input
+  namespace: default
+spec:
+  resources:
+    inputs:
+      - name: workspace
+        type: git
+        targetPath: go/src/github.com/tektoncd/pipeline
+  steps:
+    - name: unit-tests
+      image: golang
+      command: ["go"]
+      args:
+        - "test"
+        - "./..."
+      workingDir: "/workspace/go/src/github.com/tektoncd/pipeline"
+      env:
+        - name: GOPATH
+          value: /workspace/go
+```
+* `spec` has `resources` object
+  * Only `inputs` list is defined
+    * Workspace, type of `git`
+    * optional field `targetPath` can be used to initialize a resource in a specific directory
+  * A Task can have multiple `inputs` and `outputs`
+
+### Results
+
+https://tekton.dev/docs/operator/tektonresult/
+NOTE: TektonResult is enabled only on Kubernetes Platform and not on OpenShift
+
+### Workspaces
+
+Define in the Task parts of the filesystem that need to be provided at runtime by the TaskRun.
+
+Tasks specify where a Workspace is on the disk for its Steps. The provided details are details
+needed to use the Volume that houses the Workspace. A Workspace is a kind of Volume, but one
+where you can define where it is used: which Task, which Pipeline, etc.
+
+You can share inputs, outputs, data, etc. between Tasks, provide credentials held in Secrets,
+provide configurations in ConfigMaps, or access cache of build artifacts.
+
+In isolation a Task would provide an `emptyDir`, which will disappear after a TaskRun, but in
+more complex cases you might use a PersistentVolumeClaim, which might have data required by
+the TaskRun.
+
+A Pipeline can define how a Volume is used in Tasks by defining the usage in a Workspace. A
+practical example would be that
+* Task A clones a git repo into the Workspace
+* Task B compiles the code it finds in the Workspace (previously cloned git repo)
+
+Example Task
+```
+spec:
+  steps:
+    - name: write-message
+      image: ubuntu
+      script: |
+        #!/usr/bin/env bash
+        set -xe
+        if [ "$(workspaces.messages.bound)" == "true" ] ; then
+          echo hello! > $(workspaces.messages.path)/message
+        fi        
+  workspaces:
+    - name: messages
+      description: |
+        The folder where we write the message to. If no workspace
+        is provided then the message will not be written.        
+      optional: true
+      mountPath: /custom/path/relative/to/root
+```
+* `spec.steps` defines a `write-message` step
+  * if workspaces.messages has been bound, it writes "hello!" to workspaces.messages.path/message
+    * ie. a file in a directory that is defined in `workspaces.messages.path`, filename being `message`
+* `spec.workspaces` defines a `messages` workspace
+  * `optional`, so it might not be there
+  * `mountPath` tells where on the disk the workspace resides on
+  * `description` describes the workspace
+    * I guess this is printed somewhere? Perhaps when it is made during TaskRun?
+
+### Events
+
+TaskRuns have
+* Started
+* Succeeded
+* Failed
+
+PipelineRuns have
+* Started
+* Running
+* Succeeded
+* Failed
+
+### Logs
+https://tekton.dev/docs/pipelines/logs/
+
+You can get logs using `kubectl`, Tekton CLI `tkn` or through Tekton Dashboard. You can also store,
+consume and display logs using for instance Elasticsearch, Beats and Kibana.
