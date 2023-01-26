@@ -1,5 +1,9 @@
 # Tekton Getting Started
 
+## Prerequisites
+
+Install Tekton, Tekton CLI and minikube.
+
 ## Notes
 
 ### Tasks
